@@ -1,0 +1,10 @@
+#!/bin/sh
+# Build step for `herdr plugin install`. herdr runs it with the server's environment,
+# where `node`/`npm` may be missing or broken (e.g. a Homebrew node with a missing dylib).
+# Use them only if node actually runs; otherwise go through the user's login shell.
+set -u
+cd "$(dirname "$0")/.." || exit 1
+if command -v npm >/dev/null 2>&1 && { node -e 0; } >/dev/null 2>&1; then
+  exec npm install --no-audit --no-fund
+fi
+exec "${SHELL:-/bin/sh}" -lic 'node -e 0 && npm install --no-audit --no-fund'

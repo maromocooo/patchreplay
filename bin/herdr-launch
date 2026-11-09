@@ -1,0 +1,23 @@
+#!/bin/sh
+# Launch the patchreplay CLI from a herdr plugin command.
+# herdr runs plugin commands with the server's environment, which often lacks
+# version-managed Node (nvm, fnm, volta, asdf). Fall back to the user's shell.
+here=$(cd "$(dirname "$0")/.." && pwd)
+cli="$here/dist/cli.js"
+
+if [ ! -f "$cli" ]; then
+  echo "patchreplay: $cli is missing — run 'npm install' in $here" >&2
+  printf 'Press Enter to close.'; read -r _; exit 1
+fi
+
+if command -v node >/dev/null 2>&1 && { node -e 0; } >/dev/null 2>&1; then
+  node "$cli" "$@"
+else
+  "${SHELL:-/bin/sh}" -lic 'exec node "$0" "$@"' "$cli" "$@"
+fi
+status=$?
+# Keep a crashed pane on screen so the error can be read (popups pause themselves).
+if [ $status -ne 0 ] && [ -t 0 ]; then
+  printf '\npatchreplay exited with status %s. Press Enter to close.' "$status"; read -r _
+fi
+exit $status

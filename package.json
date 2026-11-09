@@ -1,0 +1,46 @@
+{
+  "name": "patchreplay",
+  "version": "0.1.0",
+  "description": "Your agent said \"fixed.\" Here's the replay. Before-and-after browser evidence for AI code changes \u2014 standalone CLI and herdr plugin.",
+  "type": "module",
+  "bin": {
+    "patchreplay": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "bin",
+    "herdr-plugin.toml",
+    "README.md",
+    "README.ja.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p .",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "prepare": "npm run build"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "keywords": [
+    "herdr",
+    "herdr-plugin",
+    "claude-code",
+    "codex",
+    "playwright",
+    "ai-agents",
+    "visual-regression",
+    "pull-request"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "gifenc": "^1.0.3",
+    "playwright-core": "1.64.0",
+    "pngjs": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "@types/pngjs": "^6.0.5",
+    "typescript": "^5.9.0"
+  }
+}

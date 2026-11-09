@@ -1,0 +1,35 @@
+id = "patchreplay"
+name = "patchreplay"
+version = "0.1.0"
+min_herdr_version = "0.9.5"
+description = "Your agent said \"fixed.\" Here's the replay. Records before/after browser evidence each time an agent finishes a turn in a Vite app."
+platforms = ["macos", "linux"]
+
+[[build]]
+command = ["sh", "bin/herdr-build"]
+
+# The watcher lives in a managed tab (no detached daemon). Close the tab or Ctrl-C to stop.
+[[panes]]
+id = "watch"
+title = "patchreplay"
+placement = "tab"
+command = ["sh", "bin/herdr-launch", "watch"]
+
+# One-off run for the focused agent's repo, shown in a popup.
+[[panes]]
+id = "run"
+title = "patchreplay run"
+placement = "popup"
+width = "80%"
+height = "70%"
+command = ["sh", "bin/herdr-launch", "run", "--herdr-focused", "--open", "--pause-at-end"]
+
+[[actions]]
+id = "open-latest"
+title = "patchreplay: open latest report for focused agent"
+command = ["sh", "bin/herdr-launch", "open", "--herdr-focused"]
+
+[[actions]]
+id = "baseline"
+title = "patchreplay: save baseline for focused agent"
+command = ["sh", "bin/herdr-launch", "baseline", "--herdr-focused"]
