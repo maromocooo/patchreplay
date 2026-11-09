@@ -23,6 +23,8 @@ export interface Scenario {
   expectation?: string;
   steps: Step[];
   source: "file" | "generated" | "default";
+  /** Set when the first generated check failed on AFTER and was rewritten once. */
+  revision?: { failedStep: number; error: string };
 }
 
 const ACTIONS = new Set([
@@ -183,6 +185,24 @@ ${fence(input.diff)}
 </untrusted_diff>
 
 Reply with the JSON object only.
+`;
+}
+
+/** Ask for one corrected check after the first one failed on AFTER. */
+export function buildRevisionPrompt(base: string, failed: Scenario, failure: { step: number; error: string }, snapshot: string): string {
+  return `${base}
+Your previous check FAILED on the AFTER version, so it is probably wrong about the page (not the code change):
+<untrusted_previous_check>
+${JSON.stringify({ title: failed.title, steps: failed.steps }, null, 1)}
+</untrusted_previous_check>
+It failed at step ${failure.step}: ${failure.error}
+
+Fresh AFTER page snapshot, taken after the app finished loading:
+<untrusted_page_snapshot_fresh>
+${snapshot.slice(0, 12000).replace(/<\/?untrusted_/gi, (m) => m.replace("<", "‹"))}
+</untrusted_page_snapshot_fresh>
+
+Write a corrected check that matches what is actually on this page. Reply with the JSON object only.
 `;
 }
 

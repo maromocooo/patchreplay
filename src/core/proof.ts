@@ -8,7 +8,7 @@ import {
 } from "./git.js";
 import { detectProject, linkNodeModules, startDevServer, type DevServer } from "./devserver.js";
 import {
-  buildGeneratorPrompt, defaultScenario, detectGenerator, generateScenario, loadScenarioFile,
+  buildGeneratorPrompt, buildRevisionPrompt, defaultScenario, detectGenerator, generateScenario, loadScenarioFile,
   type Generator, type Scenario,
 } from "./scenario.js";
 import { launchBrowser, pageSnapshot, runScenario, type SideResult } from "./runner.js";
@@ -16,6 +16,7 @@ import { decideVerdict } from "./verdict.js";
 import { renderGif } from "./gif.js";
 import { renderHtml, renderMarkdown, type RunRecord } from "./report.js";
 import { log, onExit, runId } from "./util.js";
+import { loadConfig } from "./config.js";
 
 export interface ProofOptions {
   cwd: string;
@@ -96,8 +97,9 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
   const rel = appRelative(root, opts.cwd);
   const srcApp = path.join(root, rel);
   const project = detectProject(srcApp);
-  if (!project && !opts.devCmd) throw new Error(`no package.json with a "dev" or "start" script in ${srcApp}`);
-  if (project && !project.isVite && !opts.devCmd) {
+  const config = loadConfig(srcApp);
+  if (!project && !opts.devCmd && !config?.devCmd) throw new Error(`no package.json with a "dev" or "start" script in ${srcApp}`);
+  if (project && !project.isVite && !opts.devCmd && !config?.devCmd) {
     log.warn("this does not look like a Vite app; pass --dev-cmd '<cmd with {port}>' if the URL is not detected");
   }
 
@@ -149,11 +151,12 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
     browser = await launchBrowser();
 
     progress("starting AFTER dev server…");
-    server = await startDevServer(project!, path.join(wtAfter, rel), { devCmd: opts.devCmd });
+    server = await startDevServer(project, path.join(wtAfter, rel), { devCmd: opts.devCmd, config });
     progress(`AFTER is up at ${server.url}`);
 
     let scenario: Scenario;
     let generator: string = "none";
+    let genPrompt: string | null = null;
     const scenarioFile = opts.scenarioFile ?? path.join(srcApp, ".patchreplay", "scenario.json");
     if (opts.scenarioFile || fs.existsSync(scenarioFile)) {
       scenario = loadScenarioFile(scenarioFile);
@@ -172,6 +175,7 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
             pageSnapshot: await pageSnapshot(browser, server.url),
             url: server.url,
           });
+          genPrompt = prompt;
           // The prompt can contain terminal excerpts; keep it only when debugging.
           if (process.env.PATCHREPLAY_DEBUG) fs.writeFileSync(path.join(runDir, "generator-prompt.txt"), prompt);
           scenario = await generateScenario(gen, prompt);
@@ -184,7 +188,28 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
     fs.writeFileSync(path.join(runDir, "scenario.json"), JSON.stringify(scenario, null, 2));
 
     progress("recording AFTER…");
-    const after = await runScenario(browser, scenario, server.url, "after", runDir);
+    let after = await runScenario(browser, scenario, server.url, "after", runDir);
+    // A generated check that fails on AFTER is usually wrong about the page, not the change.
+    // Give the generator one chance to correct it; BEFORE then runs the same corrected steps.
+    if (after.firstFailure >= 0 && scenario.source === "generated" && genPrompt && generator !== "none") {
+      const failed = after.steps[after.firstFailure];
+      progress(`check failed on AFTER at step ${failed.index + 1} — asking ${generator} to correct it once…`);
+      try {
+        const fresh = await pageSnapshot(browser, server.url);
+        const revised = await generateScenario(
+          generator as Generator,
+          buildRevisionPrompt(genPrompt, scenario, { step: failed.index + 1, error: failed.error ?? "failed" }, fresh),
+        );
+        revised.revision = { failedStep: failed.index + 1, error: failed.error ?? "failed" };
+        scenario = revised;
+        fs.rmSync(path.join(runDir, "after"), { recursive: true, force: true });
+        fs.writeFileSync(path.join(runDir, "scenario.json"), JSON.stringify(scenario, null, 2));
+        progress("recording AFTER with the corrected check…");
+        after = await runScenario(browser, scenario, server.url, "after", runDir);
+      } catch (err) {
+        log.warn(`could not correct the check: ${String(err).slice(0, 200)}`);
+      }
+    }
     await server.stop();
     server = null;
 
@@ -196,7 +221,7 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
       linkNodeModules(srcApp, path.join(wtBefore, rel));
       progress("starting BEFORE dev server…");
       try {
-        server = await startDevServer(project!, path.join(wtBefore, rel), { devCmd: opts.devCmd });
+        server = await startDevServer(project, path.join(wtBefore, rel), { devCmd: opts.devCmd, config });
         progress("recording BEFORE…");
         before = await runScenario(browser, scenario, server.url, "before", runDir);
       } catch (err) {

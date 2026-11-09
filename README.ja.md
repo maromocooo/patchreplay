@@ -80,6 +80,30 @@ herdr plugin pane open --plugin patchreplay --entrypoint watch
 | `open-latest` | action | 最新のレポートを開く |
 | `baseline` | action | 今の状態を基準として保存 |
 
+## API サーバーや実データを使うアプリ
+
+再生では、実際にアプリを操作します。**dev サーバーが本物のデータ（ローカル DB やデータフォルダ）を読み書きする場合は、必ず使い捨ての場所に向けてください。** そうしないと、自動生成された確認手順がデータを編集・削除する恐れがあります。
+
+`package.json` と同じ場所に `patchreplay.config.json` を置いて、コミットしてください。watch モードでも使われます。
+
+```json
+{
+  "devCmd": ["npx", "concurrently", "-k", "tsx server/index.ts", "vite --port {port} --strictPort"],
+  "env": { "API_PORT": "{port2}", "APP_DATA_DIR": "{tmp}/data" },
+  "url": "http://127.0.0.1:{port}/",
+  "ready": ["http://127.0.0.1:{port}/api/health"]
+}
+```
+
+| プレースホルダ | 埋め込まれる値 |
+|---|---|
+| `{port}` | アプリの URL 用の空きポート |
+| `{port2}` | 2つ目の空きポート（API サーバー用など） |
+| `{tmp}` | 空の一時フォルダ（変更前と変更後で別々に用意し、終了後に削除） |
+
+- `ready` には、再生を始める前に応答を待つ URL を書きます。API の起動が遅いせいで前後の結果がたまたま変わる、ということを防げます。
+- `devCmd` は引数の配列で書きます（シェルは通しません）。
+
 ## 仕組み
 
 1. 作業ツリー（未追跡ファイルを含み、ignore 対象は除く）を一時 index 経由で commit 化し、`refs/patchreplay/*` に固定します。index・HEAD・ファイルには触れません。

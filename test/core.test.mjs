@@ -218,3 +218,25 @@ test("a redirect off the app stops the run before the next step executes", async
     fs.rmSync(out, { recursive: true, force: true });
   }
 });
+
+// ---- per-app config ----
+import { loadConfig, fill } from "../dist/core/config.js";
+
+test("patchreplay.config.json: placeholders and validation", () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pp-cfg-"));
+  const write = (o) => fs.writeFileSync(path.join(dir, "patchreplay.config.json"), JSON.stringify(o));
+  assert.equal(loadConfig(dir), null, "no file → null");
+  write({ devCmd: ["vite", "--port", "{port}"], env: { DATA: "{tmp}/data", API: "{port2}" }, url: "http://127.0.0.1:{port}/", ready: ["http://127.0.0.1:{port}/api/health"] });
+  const c = loadConfig(dir);
+  const p = { port: 4001, port2: 4002, tmp: "/t" };
+  assert.deepEqual(c.devCmd.map((a) => fill(a, p)), ["vite", "--port", "4001"]);
+  assert.equal(fill(c.env.DATA, p), "/t/data");
+  assert.equal(fill(c.env.API, p), "4002");
+  write({ devCmd: "npm run dev" });
+  assert.throws(() => loadConfig(dir), /argv/);
+  write({ url: "https://example.com/" });
+  assert.throws(() => loadConfig(dir), /local/);
+  write({ ready: ["http://evil.example/"] });
+  assert.throws(() => loadConfig(dir), /local/);
+  fs.rmSync(dir, { recursive: true, force: true });
+});

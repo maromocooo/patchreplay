@@ -69,6 +69,9 @@ export function renderMarkdown(rec: RunRecord, gifRelPath?: string): string {
   });
   lines.push("");
   lines.push(`${rec.verdict.detail}`);
+  if (rec.scenario.revision) {
+    lines.push("", `_The first generated check failed on AFTER at step ${rec.scenario.revision.failedStep} and was rewritten once; both versions ran the rewritten check._`);
+  }
   lines.push("");
   const base = rec.baseCommit ? `\`${shortSha(rec.baseCommit)}\`` : "none";
   lines.push(
@@ -121,6 +124,7 @@ textarea{width:100%;height:160px;font:13px ui-monospace,monospace;background:var
 <div class="muted">${escapeHtml(rec.task || "(no task recorded)")} · ${escapeHtml(new Date(rec.createdAt).toLocaleString())}</div>
 <div class="verdict">${VERDICT_EMOJI[rec.verdict.kind]} ${escapeHtml(rec.verdict.headline)}<div>${escapeHtml(rec.verdict.detail)}</div>${(rec.verdict.caveats ?? []).map((c) => `<div class="caveat">⚠️ ${escapeHtml(c)}</div>`).join("")}</div>
 ${rec.scenario.expectation ? `<p><b>Expected:</b> ${escapeHtml(rec.scenario.expectation)}</p>` : ""}
+${rec.scenario.revision ? `<p class="muted">The first generated check failed on AFTER at step ${rec.scenario.revision.failedStep} (${escapeHtml(rec.scenario.revision.error)}) and was rewritten once. Both versions ran the rewritten check.</p>` : ""}
 <div class="videos">${video(rec.before, "Before")}${video(rec.after, "After")}</div>
 <table><thead><tr><th>#</th><th>Step</th><th>Before</th><th>After</th></tr></thead><tbody>${rows}</tbody></table>
 ${errs(rec.before, "Before")}${errs(rec.after, "After")}

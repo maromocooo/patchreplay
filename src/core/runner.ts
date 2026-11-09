@@ -13,6 +13,9 @@ export interface StepResult {
   error?: string;
   ms: number;
   screenshot: string; // path to PNG
+  /** Where the step's target was on screen (for highlighting in the GIF), if it could be found. */
+  box?: { x: number; y: number; width: number; height: number };
+  viewport?: { width: number; height: number };
 }
 
 export interface SideResult {
@@ -49,6 +52,21 @@ function locate(page: Page, s: { selector?: string; text?: string; role?: string
 
 const STEP_TIMEOUT = 5000;
 
+/**
+ * Wait until the app has finished loading: network idle, then the visible text stops changing.
+ * SPAs often render an empty/loading state first; snapshots or checks taken then are misleading.
+ */
+export async function settle(page: Page): Promise<void> {
+  await page.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+  let prev = "";
+  for (let i = 0; i < 12; i++) {
+    const cur = await page.locator("body").innerText({ timeout: 2000 }).catch(() => "");
+    if (cur && cur === prev) return;
+    prev = cur;
+    await page.waitForTimeout(400);
+  }
+}
+
 async function runStep(page: Page, base: string, step: Step): Promise<void> {
   switch (step.action) {
     case "goto": {
@@ -57,7 +75,7 @@ async function runStep(page: Page, base: string, step: Step): Promise<void> {
       const res = await page.goto(target.toString(), { waitUntil: "load", timeout: 20000 });
       // A 404/500 page is a failed navigation, not app behavior to assert on.
       if (res && res.status() >= 400) throw new Error(`HTTP ${res.status()} for ${target.pathname}`);
-      await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+      await settle(page);
       return;
     }
     case "click":
@@ -126,7 +144,8 @@ export async function runScenario(
   fs.mkdirSync(dir, { recursive: true });
   const context = await browser.newContext({
     viewport: VIEWPORT,
-    deviceScaleFactor: 1,
+    // 2x screenshots keep magnified insets in the GIF sharp; video stays at 1x.
+    deviceScaleFactor: 2,
     recordVideo: { dir, size: VIEWPORT },
   });
   const page = await context.newPage();
@@ -173,7 +192,9 @@ export async function runScenario(
     if (!isAssertion(step)) await page.waitForTimeout(150);
     const screenshot = path.join(dir, `step-${String(index + 1).padStart(2, "0")}.png`);
     await page.screenshot({ path: screenshot }).catch(() => {});
-    steps.push({ index, step, ok, error, ms: Date.now() - t0, screenshot });
+    const box = leftApp ? undefined : await targetBox(page, step);
+    const viewport = page.viewportSize() ?? undefined;
+    steps.push({ index, step, ok, error, ms: Date.now() - t0, screenshot, box, viewport });
     // A failed navigation makes later steps meaningless.
     if (!ok && (step.action === "goto" || leftApp)) break;
   }
@@ -190,13 +211,32 @@ export async function runScenario(
   return { label, url, steps, video: videoPath, consoleErrors, firstFailure };
 }
 
+/** Bounding box of what a step targets (best effort, short timeout). */
+async function targetBox(page: Page, step: Step) {
+  const s = step as { selector?: string; text?: string; role?: string; name?: string };
+  let loc: Locator | null = null;
+  if (step.action === "expectText") {
+    // Prefer the matched text itself (small, legible) over its container.
+    const scope = s.selector ? page.locator(s.selector).first() : page.locator("body");
+    const text = scope.getByText(step.text, { exact: false }).first();
+    const tb = await text.boundingBox({ timeout: 300 }).catch(() => null);
+    if (tb && tb.width > 0 && tb.height > 0) return tb;
+    loc = s.selector ? scope : null;
+  }
+  else if (step.action === "expectCount") loc = page.locator(step.selector).first();
+  else if (s.selector || s.text || s.role) loc = locate(page, s);
+  if (!loc) return undefined;
+  const b = await loc.boundingBox({ timeout: 300 }).catch(() => null);
+  return b && b.width > 0 && b.height > 0 ? b : undefined;
+}
+
 /** A11y snapshot of the page, used as grounding for scenario generation. */
 export async function pageSnapshot(browser: Browser, url: string): Promise<string> {
   const context = await browser.newContext({ viewport: VIEWPORT });
   const page = await context.newPage();
   try {
     await page.goto(url, { waitUntil: "load", timeout: 20000 });
-    await page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+    await settle(page);
     return await page.locator("body").ariaSnapshot({ timeout: 5000 });
   } catch (err) {
     return `(snapshot failed: ${String(err).slice(0, 200)})`;

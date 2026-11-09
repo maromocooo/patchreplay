@@ -20,6 +20,43 @@ function stepLabel(r: SideResult, i: number): { text: string; ok: boolean | null
   return { text: `${s.ok ? "✓" : "✗"} ${desc}`, ok: s.ok };
 }
 
+const PANE_W = 580; // rendered width of one screenshot in the frame
+const PANE_H = 362;
+
+/** Outline the step's target and, if it is small, add a magnified inset so the change is readable. */
+type Box = { x: number; y: number; width: number; height: number };
+
+function highlight(st: SideResult["steps"][number], src: string, cls: string, pair?: Box): string {
+  if (!st.viewport || !src) return "";
+  const vw0 = st.viewport.width;
+  const small = (b?: Box) => !!b && (b.width / vw0) * PANE_W < 220;
+  // Outline our own target; magnify our target if small, else the other side's (same spot, for comparison).
+  const zoomBox = small(st.box) ? st.box : small(pair) ? pair : undefined;
+  if (!st.box && !zoomBox) return "";
+  const { x, y, width: w, height: h } = st.box ?? zoomBox!;
+  const vw = st.viewport.width;
+  const vh = st.viewport.height;
+  const color = cls === "bad" ? "#ff7b72" : "#3fb950";
+  const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(2)}%`;
+  let out = st.box
+    ? `<div class="hl" style="left:${pct(x, vw)};top:${pct(y, vh)};width:${pct(w, vw)};height:${pct(h, vh)};border-color:${color}"></div>`
+    : "";
+  if (zoomBox) {
+    const { x, y, width: w, height: h } = zoomBox;
+    // Magnify so the target is ~3x more legible than in the frame, capped to fit the inset.
+    const pad = 6;
+    const zoom = Math.min(3.2 * (PANE_W / vw), 360 / (w + pad * 2), 110 / (h + pad * 2));
+    if (zoom / (PANE_W / vw) < 1.5) return out; // would not be more legible
+    const iw = Math.round((w + pad * 2) * zoom);
+    const ih = Math.round((h + pad * 2) * zoom);
+    const bx = -Math.round((x - pad) * zoom);
+    const by = -Math.round((y - pad) * zoom);
+    const top = y / vh > 0.5 ? "top:10px" : "bottom:10px";
+    out += `<div class="zoom" style="${top};width:${iw}px;height:${ih}px;border-color:${color};background-image:url(${src});background-size:${Math.round(vw * zoom)}px ${Math.round(vh * zoom)}px;background-position:${bx}px ${by}px"></div>`;
+  }
+  return out;
+}
+
 function frameHtml(opts: {
   before: SideResult | null;
   after: SideResult;
@@ -33,8 +70,12 @@ function frameHtml(opts: {
     if (!r) return `<div class="pane empty"><div class="tag">${label}</div><div class="none">no baseline</div></div>`;
     const s = stepLabel(r, opts.i);
     const cls = s.ok === null ? "" : s.ok ? "ok" : "bad";
+    const st = r.steps[opts.i] ?? r.steps[r.steps.length - 1];
+    const src = img(st?.screenshot);
+    const other = r === opts.after ? opts.before : opts.after;
+    const pair = other?.steps[opts.i]?.box;
     return `<div class="pane"><div class="tag">${label}</div>
-      <img src="${img(r.steps[opts.i]?.screenshot ?? r.steps[r.steps.length - 1]?.screenshot)}">
+      <div class="shot"><img src="${src}">${st ? highlight(st, src, cls, pair) : ""}</div>
       <div class="step ${cls}">${escapeHtml(s.text)}</div></div>`;
   };
   const footer = opts.verdict
@@ -48,7 +89,10 @@ function frameHtml(opts: {
     .title{color:#8b949e;max-width:760px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .row{display:flex;gap:12px;margin-top:8px}
     .pane{flex:1;position:relative;border:1px solid #30363d;border-radius:8px;overflow:hidden;background:#161b22}
-    .pane img{display:block;width:100%;height:362px;object-fit:cover;object-position:top}
+    .shot{position:relative;height:362px;overflow:hidden}
+    .pane img{display:block;width:100%;height:362px;object-fit:fill}
+    .hl{position:absolute;border:2px solid;border-radius:4px;box-shadow:0 0 0 2000px #0000;pointer-events:none}
+    .zoom{position:absolute;right:10px;border:2px solid;border-radius:6px;background-repeat:no-repeat;box-shadow:0 6px 24px #000a;background-color:#fff}
     .tag{position:absolute;top:8px;left:8px;background:#000c;padding:2px 9px;border-radius:999px;font-weight:600;font-size:13px}
     .step{padding:8px 10px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid #30363d}
     .step.ok{color:#7ee787}.step.bad{color:#ff7b72;background:#ff7b7214}

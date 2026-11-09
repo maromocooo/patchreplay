@@ -89,6 +89,30 @@ type = "plugin_action"
 command = "patchreplay.open-latest"
 ```
 
+## Apps with an API server or real data
+
+Replays click through your app for real. **If your dev server reads or writes real data (a local DB, a data directory), point it at a throwaway location.** Otherwise a generated check could edit or delete your data.
+
+Add `patchreplay.config.json` next to `package.json` and commit it. Watch mode uses it too.
+
+```json
+{
+  "devCmd": ["npx", "concurrently", "-k", "tsx server/index.ts", "vite --port {port} --strictPort"],
+  "env": { "API_PORT": "{port2}", "APP_DATA_DIR": "{tmp}/data" },
+  "url": "http://127.0.0.1:{port}/",
+  "ready": ["http://127.0.0.1:{port}/api/health"]
+}
+```
+
+| Placeholder | Filled with |
+|---|---|
+| `{port}` | A free port for the app URL |
+| `{port2}` | A second free port, e.g. for an API server |
+| `{tmp}` | An empty directory, separate for BEFORE and AFTER and deleted afterwards |
+
+- `ready` lists URLs that must respond before a replay starts, so a slow API doesn't make the two versions differ by accident.
+- `devCmd` is an argv array (no shell).
+
 ## Options
 
 ```
@@ -122,8 +146,8 @@ Actions: `goto`, `click`, `dblclick`, `hover`, `fill`, `press`, `wait`, `waitFor
 1. **Snapshot.** The working tree, including untracked files and excluding ignored ones, is written as a git commit through a temporary index and pinned under `refs/patchreplay/*`. Your index, `HEAD` and files are never touched.
 2. **Worktrees.** Before and after are checked out into temporary worktrees, with `node_modules` linked from your checkout.
 3. **Servers.** Each version's dev server starts on its own free port. They run one at a time.
-4. **Check.** The generator sees the diff, the task and the after page's accessibility tree, and returns at most 25 steps. patchreplay validates them before running anything.
-5. **Replay.** Playwright runs the same steps on both versions and records video and per-step screenshots.
+4. **Check.** Once the app has finished loading, the generator sees the diff, the task and the AFTER page's accessibility tree, and returns at most 25 steps. patchreplay validates them before running anything. If a generated check fails on AFTER, which usually means the check is wrong about the page, the generator gets **one** chance to correct it with the failure and a fresh snapshot. Both versions then run the corrected check, and the report says it was rewritten.
+5. **Replay.** Playwright runs the same steps on both versions and records video and per-step screenshots. In the GIF, each step's target is outlined, and small targets such as a status-bar label get a magnified inset so the change is readable.
 6. **Verdict.** Computed from assertion results only. A good-looking video is never treated as a pass.
    - If dependencies changed between the two versions, the verdict carries a visible caveat.
    - Generated scenarios are validated before they run: `goto` only accepts paths on your app, and leaving the app's origin ends the run.
