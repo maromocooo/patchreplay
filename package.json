@@ -1,7 +1,7 @@
 {
   "name": "patchreplay",
-  "version": "0.1.0",
-  "description": "Your agent said \"fixed.\" Here's the replay. Before-and-after browser evidence for AI code changes \u2014 standalone CLI and herdr plugin.",
+  "version": "0.2.0",
+  "description": "Your agent said \"fixed.\" Here's the replay. Before-and-after browser evidence for AI code changes — standalone CLI and herdr plugin.",
   "type": "module",
   "bin": {
     "patchreplay": "dist/cli.js"

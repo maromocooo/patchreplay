@@ -1,6 +1,6 @@
 id = "patchreplay"
 name = "patchreplay"
-version = "0.1.0"
+version = "0.2.0"
 min_herdr_version = "0.9.5"
 description = "Your agent said \"fixed.\" Here's the replay. Records before/after browser evidence each time an agent finishes a turn in a Vite app."
 platforms = ["macos", "linux"]
