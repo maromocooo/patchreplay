@@ -1,10 +1,24 @@
 #!/bin/sh
 # Build step for `herdr plugin install`. herdr runs it with the server's environment,
 # where `node`/`npm` may be missing or broken (e.g. a Homebrew node with a missing dylib).
-# Use them only if node actually runs; otherwise go through the user's login shell.
+# Find a working node (via the login shell if needed), remember its path for
+# bin/herdr-launch so the first popup is fast too, and build with it.
 set -u
 cd "$(dirname "$0")/.." || exit 1
-if command -v npm >/dev/null 2>&1 && { node -e 0; } >/dev/null 2>&1; then
-  exec npm install --no-audit --no-fund
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/herdr-patchreplay/node-path"
+node_ok() { [ -n "$1" ] && [ -x "$1" ] && { "$1" -e 0; } >/dev/null 2>&1; }
+
+node_bin=""
+if p=$(command -v node 2>/dev/null) && node_ok "$p"; then
+  node_bin="$p"
+else
+  p=$("${SHELL:-/bin/sh}" -lic 'command -v node' 2>/dev/null </dev/null | tail -n 1 | tr -d '\r')
+  case "$p" in /*) node_ok "$p" && node_bin="$p" ;; esac
 fi
-exec "${SHELL:-/bin/sh}" -lic 'node -e 0 && npm install --no-audit --no-fund'
+if [ -z "$node_bin" ]; then
+  echo "patchreplay: no working node found (need Node 20+)" >&2
+  exit 1
+fi
+mkdir -p "$(dirname "$cache")" && printf '%s\n' "$node_bin" > "$cache"
+# Run npm with this node first on PATH (npm sits next to node in nvm/fnm/volta/brew layouts).
+PATH="$(dirname "$node_bin"):$PATH" exec npm install --no-audit --no-fund

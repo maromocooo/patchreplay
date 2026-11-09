@@ -1,22 +1,42 @@
 #!/bin/sh
 # Launch the patchreplay CLI from a herdr plugin command.
 # herdr runs plugin commands with the server's environment, which often lacks
-# version-managed Node (nvm, fnm, volta, asdf). Fall back to the user's shell.
+# version-managed Node (nvm, fnm, volta, asdf) or has a broken one first on PATH.
+# Find a working node once (via the user's login shell if needed) and cache its
+# path, so later launches skip the slow login shell.
 here=$(cd "$(dirname "$0")/.." && pwd)
 cli="$here/dist/cli.js"
+cache="${XDG_CACHE_HOME:-$HOME/.cache}/herdr-patchreplay/node-path"
 
 if [ ! -f "$cli" ]; then
   echo "patchreplay: $cli is missing — run 'npm install' in $here" >&2
   printf 'Press Enter to close.'; read -r _; exit 1
 fi
 
-if command -v node >/dev/null 2>&1 && { node -e 0; } >/dev/null 2>&1; then
-  node "$cli" "$@"
+node_ok() { [ -n "$1" ] && [ -x "$1" ] && { "$1" -e 0; } >/dev/null 2>&1; }
+
+node_bin=""
+if p=$(command -v node 2>/dev/null) && node_ok "$p"; then
+  node_bin="$p"
+elif [ -f "$cache" ] && node_ok "$(cat "$cache")"; then
+  node_bin=$(cat "$cache")
+else
+  # Slow path, once: ask the login shell where node is. Keep only an absolute path from the last line.
+  p=$("${SHELL:-/bin/sh}" -lic 'command -v node' 2>/dev/null </dev/null | tail -n 1 | tr -d '\r')
+  case "$p" in /*) ;; *) p="" ;; esac
+  if node_ok "$p"; then
+    node_bin="$p"
+    mkdir -p "$(dirname "$cache")" && printf '%s\n' "$p" > "$cache"
+  fi
+fi
+
+if [ -n "$node_bin" ]; then
+  "$node_bin" "$cli" "$@"
 else
   "${SHELL:-/bin/sh}" -lic 'exec node "$0" "$@"' "$cli" "$@"
 fi
 status=$?
-# Keep a crashed pane on screen so the error can be read (popups pause themselves).
+# Keep a crashed pane on screen so the error can be read.
 if [ $status -ne 0 ] && [ -t 0 ]; then
   printf '\npatchreplay exited with status %s. Press Enter to close.' "$status"; read -r _
 fi
