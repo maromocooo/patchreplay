@@ -1,12 +1,13 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { parseArgs } from "node:util";
-import { recordBaseline, runProof } from "./core/proof.js";
 import { VERDICT_EMOJI } from "./core/verdict.js";
 import { repoRoot } from "./core/git.js";
 import { runCmd } from "./core/util.js";
 import { isHerdrAvailable, listAgents, request } from "./herdr/client.js";
-import { watchDirectory, watchHerdr } from "./herdr/watch.js";
+// proof.js / watch.js pull in Playwright; load them only for commands that record.
+const proof = () => import("./core/proof.js");
+const watch = () => import("./herdr/watch.js");
 import type { Generator } from "./core/scenario.js";
 import fs from "node:fs";
 
@@ -80,6 +81,7 @@ async function main() {
 
   switch (cmd) {
     case "run": {
+      const { runProof } = await proof();
       const rec = await runProof({
         cwd,
         base: values.base,
@@ -99,11 +101,13 @@ async function main() {
       break;
     }
     case "baseline": {
+      const { recordBaseline } = await proof();
       const b = await recordBaseline(cwd, "cli", values.task);
       process.stdout.write(`baseline saved: ${b.commit.slice(0, 8)}\n`);
       break;
     }
     case "watch": {
+      const { watchDirectory, watchHerdr } = await watch();
       if (isHerdrAvailable() && !values.dir) await watchHerdr({ generator, open: values.open });
       else await watchDirectory({ generator, open: values.open, cwd });
       break;
