@@ -28,7 +28,9 @@ Builds, dev servers, browsers and reports all stay on your machine. The one exce
 - the AFTER page's accessibility tree
 - in herdr mode, the last lines of the agent's terminal
 
-That call counts against your plan or API usage like any other prompt. To send nothing, use `--generator none` or your own `.patchreplay/scenario.json`. Terminal excerpts are used for that call only. They are never written to reports, and the prompt is saved only with `PATCHREPLAY_DEBUG=1`. Reports stay in `.patchreplay/` until you share them.
+That call counts against your plan or API usage like any other prompt. To send nothing, use `--generator none` or your own `.patchreplay/scenario.json`.
+
+The call runs from an empty temporary directory with tools disabled: no shell, file or MCP access, and no project hooks or settings. Page content and diffs are passed in as clearly marked data. The returned steps are validated before anything runs. Terminal excerpts are used for that call only. They are never written to reports, and the prompt is saved only with `PATCHREPLAY_DEBUG=1`. Reports stay in `.patchreplay/` until you share them.
 
 ## Quick start (any terminal)
 

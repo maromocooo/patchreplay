@@ -174,7 +174,7 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
           });
           // The prompt can contain terminal excerpts; keep it only when debugging.
           if (process.env.PATCHREPLAY_DEBUG) fs.writeFileSync(path.join(runDir, "generator-prompt.txt"), prompt);
-          scenario = await generateScenario(gen, prompt, path.join(wtAfter, rel));
+          scenario = await generateScenario(gen, prompt);
         } catch (err) {
           log.warn(`scenario generation failed (${String(err).slice(0, 200)}); falling back to capture only`);
           scenario = defaultScenario();
