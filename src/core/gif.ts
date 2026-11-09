@@ -93,7 +93,7 @@ function frameHtml(opts: {
     .pane img{display:block;width:100%;height:362px;object-fit:fill}
     .hl{position:absolute;border:2px solid;border-radius:4px;box-shadow:0 0 0 2000px #0000;pointer-events:none}
     .zoom{position:absolute;right:10px;border:2px solid;border-radius:6px;background-repeat:no-repeat;box-shadow:0 6px 24px #000a;background-color:#fff}
-    .tag{position:absolute;top:8px;left:8px;background:#000c;padding:2px 9px;border-radius:999px;font-weight:600;font-size:13px}
+    .tag{position:absolute;z-index:2;top:8px;left:8px;background:#000c;padding:2px 9px;border-radius:999px;font-weight:600;font-size:13px}
     .step{padding:8px 10px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid #30363d}
     .step.ok{color:#7ee787}.step.bad{color:#ff7b72;background:#ff7b7214}
     .empty .none{height:398px;display:flex;align-items:center;justify-content:center;color:#8b949e}
