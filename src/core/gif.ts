@@ -5,7 +5,8 @@ import { PNG } from "pngjs";
 import gifenc from "gifenc";
 import type { SideResult } from "./runner.js";
 import type { Verdict } from "./verdict.js";
-import { VERDICT_EMOJI } from "./verdict.js";
+import { VERDICT_EMOJI, stepMark } from "./verdict.js";
+import type { Scenario } from "./scenario.js";
 import { escapeHtml } from "./util.js";
 
 const { GIFEncoder, quantize, applyPalette } = gifenc;
@@ -13,11 +14,13 @@ const { GIFEncoder, quantize, applyPalette } = gifenc;
 const FRAME_W = 1200;
 const FRAME_H = 500;
 
-function stepLabel(r: SideResult, i: number): { text: string; ok: boolean | null } {
+function stepLabel(r: SideResult, i: number, verdict: Verdict, intent: Scenario["intent"]): { text: string; cls: string } {
   const s = r.steps[i];
-  if (!s) return { text: "(not reached)", ok: null };
+  const m = stepMark(verdict, intent, r.label, s);
+  if (!s) return { text: "(not reached)", cls: "" };
   const desc = s.step.note ?? s.step.action;
-  return { text: `${s.ok ? "✓" : "✗"} ${desc}`, ok: s.ok };
+  const suffix = m.tone === "neutral" || m.tone === "warn" ? ` — ${m.label}` : "";
+  return { text: `${m.symbol} ${desc}${suffix}`, cls: m.tone };
 }
 
 const PANE_W = 580; // rendered width of one screenshot in the frame
@@ -36,7 +39,7 @@ function highlight(st: SideResult["steps"][number], src: string, cls: string, pa
   const { x, y, width: w, height: h } = st.box ?? zoomBox!;
   const vw = st.viewport.width;
   const vh = st.viewport.height;
-  const color = cls === "bad" ? "#ff7b72" : "#3fb950";
+  const color = cls === "bad" ? "#ff7b72" : cls === "warn" ? "#d29922" : cls === "neutral" ? "#8b949e" : "#3fb950";
   const pct = (v: number, total: number) => `${((v / total) * 100).toFixed(2)}%`;
   let out = st.box
     ? `<div class="hl" style="left:${pct(x, vw)};top:${pct(y, vh)};width:${pct(w, vw)};height:${pct(h, vh)};border-color:${color}"></div>`
@@ -64,12 +67,14 @@ function frameHtml(opts: {
   total: number;
   title: string;
   verdict?: Verdict;
+  finalVerdict: Verdict;
+  intent: Scenario["intent"];
 }): string {
   const img = (p?: string) => (p && fs.existsSync(p) ? `data:image/png;base64,${fs.readFileSync(p).toString("base64")}` : "");
   const pane = (label: string, r: SideResult | null) => {
     if (!r) return `<div class="pane empty"><div class="tag">${label}</div><div class="none">no baseline</div></div>`;
-    const s = stepLabel(r, opts.i);
-    const cls = s.ok === null ? "" : s.ok ? "ok" : "bad";
+    const s = stepLabel(r, opts.i, opts.finalVerdict, opts.intent);
+    const cls = s.cls;
     const st = r.steps[opts.i] ?? r.steps[r.steps.length - 1];
     const src = img(st?.screenshot);
     const other = r === opts.after ? opts.before : opts.after;
@@ -96,6 +101,7 @@ function frameHtml(opts: {
     .tag{position:absolute;z-index:2;top:8px;left:8px;background:#000c;padding:2px 9px;border-radius:999px;font-weight:600;font-size:13px}
     .step{padding:8px 10px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;border-top:1px solid #30363d}
     .step.ok{color:#7ee787}.step.bad{color:#ff7b72;background:#ff7b7214}
+    .step.neutral{color:#a5b4c3}.step.warn{color:#e3b341;background:#d2992214}
     .empty .none{height:398px;display:flex;align-items:center;justify-content:center;color:#8b949e}
     .progress,.verdict{margin-top:10px;text-align:center;font-weight:600;color:#8b949e}
     .verdict{color:#e6edf3;font-size:17px}.cav{font-size:13px;color:#d29922;font-weight:500;margin-top:2px}
@@ -109,16 +115,17 @@ function frameHtml(opts: {
 /** Render side-by-side before/after frames (one per step + a verdict card) into an animated GIF. */
 export async function renderGif(
   browser: Browser,
-  opts: { before: SideResult | null; after: SideResult; title: string; verdict: Verdict; out: string },
+  opts: { before: SideResult | null; after: SideResult; title: string; verdict: Verdict; intent?: Scenario["intent"]; out: string },
 ): Promise<void> {
   const context = await browser.newContext({ viewport: { width: FRAME_W, height: FRAME_H }, deviceScaleFactor: 1 });
   const page = await context.newPage();
   const total = Math.max(opts.after.steps.length, opts.before?.steps.length ?? 0);
   const gif = GIFEncoder();
   const frames: { html: string; delay: number }[] = [];
-  const { verdict, ...rest } = opts;
+  const { verdict, intent, ...base } = opts;
+  const rest = { ...base, finalVerdict: verdict, intent };
   for (let i = 0; i < total; i++) {
-    const failedHere = [opts.before, opts.after].some((r) => r?.steps[i] && !r.steps[i].ok);
+    const failedHere = [opts.before, opts.after].some((r) => r?.steps[i] && !r.steps[i].ok); // linger on differences
     frames.push({ html: frameHtml({ ...rest, i, total }), delay: failedHere ? 2200 : 1100 });
   }
   frames.push({ html: frameHtml({ ...rest, i: total - 1, total, verdict }), delay: 3500 });

@@ -3,7 +3,7 @@ import { isAssertion } from "./scenario.js";
 import type { SideResult } from "./runner.js";
 
 export type VerdictKind =
-  | "fixed" // after passes every step; before reached an assertion and failed it
+  | "verified" // after passes every step; before reached an assertion and failed it
   | "inconclusive" // before broke for a reason that is not an assertion (load/interaction/startup)
   | "no-difference" // both pass every step
   | "after-fails" // after fails a step
@@ -94,14 +94,23 @@ export function decideVerdict(
         caveats,
       };
     }
-    const fixed: Verdict = {
-      kind: "fixed",
-      headline: `Fixed: before fails, after passes ${assertions} check(s)`,
-      detail: `Before failed at ${text}`,
+    const intent = scenario.intent ?? "change";
+    const word = intent === "fix" ? "Fixed" : intent === "feature" ? "Added" : "Verified";
+    const what =
+      intent === "fix"
+        ? `the bug reproduces before and is gone after (${assertions} check(s))`
+        : intent === "feature"
+          ? `the new behavior appears only after the change (${assertions} check(s))`
+          : `the expected change appears only after the change (${assertions} check(s))`;
+    return {
+      kind: "verified",
+      headline: `${word}${caveats.length ? " (with caveats)" : ""}: ${what}`,
+      detail:
+        intent === "fix"
+          ? `Bug reproduced before at ${text}`
+          : `Not present before (${text.replace(/^step (\d+) \(([^)]+)\).*$/, "step $1, $2")})`,
       caveats,
     };
-    if (caveats.length) fixed.headline = `Fixed (with caveats): before fails, after passes ${assertions} check(s)`;
-    return fixed;
   }
   return {
     kind: "no-difference",
@@ -112,10 +121,32 @@ export function decideVerdict(
 }
 
 export const VERDICT_EMOJI: Record<VerdictKind, string> = {
-  fixed: "✅",
+  verified: "✅",
   inconclusive: "⚠️",
   "no-difference": "➖",
   "after-fails": "❌",
   "capture-only": "📷",
   "after-only": "☑️",
 };
+
+export type Tone = "ok" | "bad" | "neutral" | "warn";
+
+/**
+ * How to show one step's result. Red is reserved for real problems: when the change is verified,
+ * BEFORE "failing" a check just means the new behavior wasn't there yet (or the bug reproduced).
+ */
+export function stepMark(
+  verdict: Verdict,
+  intent: Scenario["intent"],
+  side: "before" | "after",
+  s: { ok: boolean } | undefined,
+): { symbol: string; tone: Tone; label: string } {
+  if (!s) return { symbol: "·", tone: "neutral", label: "not reached" };
+  if (s.ok) return { symbol: "✓", tone: "ok", label: "pass" };
+  if (side === "before" && verdict.kind === "verified") {
+    if (intent === "fix") return { symbol: "✗", tone: "warn", label: "bug reproduced" };
+    if (intent === "feature") return { symbol: "○", tone: "neutral", label: "not there yet" };
+    return { symbol: "○", tone: "neutral", label: "different before" };
+  }
+  return { symbol: "✗", tone: "bad", label: "fail" };
+}

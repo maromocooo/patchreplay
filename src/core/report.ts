@@ -3,7 +3,7 @@ import path from "node:path";
 import type { Scenario, Step } from "./scenario.js";
 import type { SideResult } from "./runner.js";
 import type { Verdict } from "./verdict.js";
-import { VERDICT_EMOJI } from "./verdict.js";
+import { VERDICT_EMOJI, stepMark } from "./verdict.js";
 import { escapeHtml } from "./util.js";
 import { shortSha } from "./git.js";
 
@@ -49,11 +49,10 @@ function describe(step: Step): string {
   }
 }
 
-const mark = (r: SideResult | null, i: number) => {
+const markFor = (rec: RunRecord) => (r: SideResult | null, i: number) => {
   if (!r) return "—";
-  const s = r.steps[i];
-  if (!s) return "·";
-  return s.ok ? "✓" : "✗";
+  const m = stepMark(rec.verdict, rec.scenario.intent, r.label, r.steps[i]);
+  return m.tone === "neutral" || m.tone === "warn" ? `${m.symbol} ${m.label}` : m.symbol;
 };
 
 export function renderMarkdown(rec: RunRecord, gifRelPath?: string): string {
@@ -63,6 +62,7 @@ export function renderMarkdown(rec: RunRecord, gifRelPath?: string): string {
   for (const c of rec.verdict.caveats ?? []) lines.push(`> ⚠️ ${c}`, "");
   if (gifRelPath) lines.push(`![patchreplay before/after](${gifRelPath})`, "");
   if (rec.scenario.expectation) lines.push(`**Expected:** ${rec.scenario.expectation}`, "");
+  const mark = markFor(rec);
   lines.push(`| # | Step | Before | After |`, `|---|---|:---:|:---:|`);
   rec.scenario.steps.forEach((st, i) => {
     lines.push(`| ${i + 1} | ${describe(st).replace(/\|/g, "\\|")} | ${mark(rec.before, i)} | ${mark(rec.after, i)} |`);
@@ -92,9 +92,13 @@ export function renderHtml(rec: RunRecord, runDir: string): string {
     .map((st, i) => {
       const b = rec.before?.steps[i];
       const a = rec.after.steps[i];
-      const cell = (s: typeof a | undefined, r: SideResult | null) =>
-        !r ? `<td class="na">—</td>` : !s ? `<td class="na">not reached</td>` :
-          `<td class="${s.ok ? "ok" : "bad"}"><a href="${rel(s.screenshot)}">${s.ok ? "✓ pass" : "✗ " + escapeHtml(s.error ?? "fail")}</a></td>`;
+      const cell = (s: typeof a | undefined, r: SideResult | null) => {
+        if (!r) return `<td class="na">—</td>`;
+        if (!s) return `<td class="na">not reached</td>`;
+        const m = stepMark(rec.verdict, rec.scenario.intent, r.label, s);
+        const text = s.ok ? "✓ pass" : m.tone === "bad" ? `✗ ${escapeHtml(s.error ?? "fail")}` : `${m.symbol} ${m.label}`;
+        return `<td class="${m.tone}"><a href="${rel(s.screenshot)}" title="${escapeHtml(s.error ?? "")}">${text}</a></td>`;
+      };
       return `<tr><td>${i + 1}</td><td>${escapeHtml(describe(st))}${st.note ? `<div class="note">${escapeHtml(st.note)}</div>` : ""}</td>${cell(b, rec.before)}${cell(a, rec.after)}</tr>`;
     })
     .join("\n");
@@ -115,7 +119,7 @@ figure{margin:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;
 figcaption{padding:6px 10px;font-weight:600;border-bottom:1px solid var(--line)}video{display:block;width:100%}
 .none{padding:60px 0;text-align:center;color:var(--muted)}
 table{width:100%;border-collapse:collapse;margin-top:16px}td,th{border-bottom:1px solid var(--line);padding:8px;text-align:left;vertical-align:top}
-td.ok a{color:var(--ok)}td.bad a{color:var(--bad)}td.na{color:var(--muted)}.note{color:var(--muted);font-size:13px}
+td.ok a{color:var(--ok)}td.bad a{color:var(--bad)}td.neutral a{color:var(--muted)}td.warn a{color:#bf8700}td.na{color:var(--muted)}.note{color:var(--muted);font-size:13px}
 pre{white-space:pre-wrap;background:var(--card);padding:10px;border-radius:8px;overflow:auto}
 img.gif{max-width:100%;border-radius:10px;border:1px solid var(--line);margin-top:16px}
 textarea{width:100%;height:160px;font:13px ui-monospace,monospace;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:8px}

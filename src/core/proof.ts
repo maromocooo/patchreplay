@@ -237,7 +237,7 @@ export async function runProof(opts: ProofOptions): Promise<RunRecord> {
     const gifPath = path.join(runDir, "replay.gif");
     if (opts.gif !== false) {
       progress("rendering GIF…");
-      await renderGif(browser, { before, after, title: scenario.title, verdict, out: gifPath });
+      await renderGif(browser, { before, after, title: scenario.title, verdict, intent: scenario.intent, out: gifPath });
     }
     const rec: RunRecord = {
       id,

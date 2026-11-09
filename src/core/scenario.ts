@@ -19,8 +19,10 @@ export type Step =
 
 export interface Scenario {
   title: string;
-  /** What the fixed behavior should look like, in one sentence. */
+  /** What the changed behavior should look like, in one sentence. */
   expectation?: string;
+  /** What kind of change this checks: a bug fix, a new feature, or another change. Shapes the wording only. */
+  intent?: "fix" | "feature" | "change";
   steps: Step[];
   source: "file" | "generated" | "default";
   /** Set when the first generated check failed on AFTER and was rewritten once. */
@@ -101,6 +103,7 @@ export function validateScenario(raw: unknown, source: Scenario["source"]): Scen
   return {
     title: typeof obj.title === "string" && obj.title.trim() ? obj.title.slice(0, 120) : "patchreplay scenario",
     expectation: typeof obj.expectation === "string" ? obj.expectation.slice(0, 500) : undefined,
+    intent: obj.intent === "fix" || obj.intent === "feature" ? obj.intent : "change",
     steps: normalized,
     source,
   };
@@ -159,7 +162,8 @@ Goal: the steps should pass on AFTER, and should fail on BEFORE if the change fi
 
 Rules:
 - Reply with ONE JSON object only. No prose. Do not use tools.
-- Shape: {"title": string, "expectation": string, "steps": Step[]}  (3-12 steps)
+- Shape: {"title": string, "expectation": string, "intent": "fix" | "feature" | "change", "steps": Step[]}  (3-12 steps)
+  intent: "fix" if the change repairs broken behavior, "feature" if it adds something new, otherwise "change".
 - Step actions: goto{path}, click/hover/dblclick{selector|text|role+name}, fill{selector|text|role+name, value}, press{key, selector?},
   wait{ms<=2000}, waitFor{selector|text|role+name}, scroll{y}, setViewport{width,height},
   expectVisible/expectHidden{selector|text|role+name}, expectText{text, selector?}, expectCount{selector, count}

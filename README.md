@@ -9,7 +9,7 @@ patchreplay records the same browser steps against your app **before** and **aft
 ![patchreplay: before fails, after passes](assets/demo.gif)
 
 - **No config, no existing tests needed.** patchreplay starts both versions of your Vite app, asks the coding agent you already use (Claude Code or Codex) to write a short check, and runs it on both.
-- **Honest verdicts.** `✅ fixed` only when *before* reaches an assertion and fails it, and *after* passes. A page that didn't load or a click that couldn't happen gives `⚠️ inconclusive`, never "fixed". The other results are `➖ no difference`, `❌ after fails`, `📷 captured only` and `☑️ after only (no baseline)`.
+- **Honest verdicts.** `✅` only when *before* reaches an assertion and fails it, and *after* passes. The wording follows the change: **Fixed** (the bug reproduces before and is gone after), **Added** (a new feature appears only after) or **Verified**. A feature that didn't exist yet is shown as `○ not there yet`, not as a red failure. A page that didn't load or a click that couldn't happen gives `⚠️ inconclusive`, never "fixed". The other results are `➖ no difference`, `❌ after fails`, `📷 captured only` and `☑️ after only (no baseline)`.
 - **Never touches your work.** Snapshots are git objects written through a temporary index; both versions run in throwaway worktrees.
 - **Built for [herdr](https://github.com/herdrdev/herdr).** When an agent pane finishes a turn, patchreplay records the proof automatically. It also works without herdr.
 

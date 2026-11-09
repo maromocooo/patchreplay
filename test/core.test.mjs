@@ -48,7 +48,7 @@ const scenario = (assertions) => ({
 });
 
 test("verdict never claims more than was checked", () => {
-  assert.equal(decideVerdict(scenario(1), side("before", [true, false]), side("after", [true, true])).kind, "fixed");
+  assert.equal(decideVerdict(scenario(1), side("before", [true, false]), side("after", [true, true])).kind, "verified");
   assert.equal(decideVerdict(scenario(1), side("before", [true, true]), side("after", [true, true])).kind, "no-difference");
   assert.equal(decideVerdict(scenario(1), side("before", [true, true]), side("after", [true, false])).kind, "after-fails");
   assert.equal(decideVerdict(scenario(1), null, side("after", [true, true])).kind, "after-only");
@@ -141,7 +141,7 @@ test("BEFORE dev server failing to start is inconclusive", () => {
 test("dependency changes weaken a fixed verdict with a visible caveat", () => {
   const s = scen("goto", "expectText");
   const v = decideVerdict(s, sideWith("before", [["goto", true], ["expectText", false]]), sideWith("after", [["goto", true], ["expectText", true]]), { depsChanged: true });
-  assert.equal(v.kind, "fixed");
+  assert.equal(v.kind, "verified");
   assert.match(v.headline, /caveats/);
   assert.equal(v.caveats.length, 1);
 });
@@ -251,4 +251,25 @@ test("revision prompt fences the previous check, the error and the snapshot", as
   );
   assert.equal((p.match(/<\/untrusted_/g) || []).length, 3, "only our own closing tags survive");
   assert.ok(!p.includes("y".repeat(600)), "error is truncated");
+});
+
+// ---- wording: a missing feature before the change is not a failure ----
+import { stepMark } from "../dist/core/verdict.js";
+
+test("verified verdict wording follows the change's intent", () => {
+  const sc = (intent) => ({ ...scen("goto", "expectText"), intent });
+  const b = sideWith("before", [["goto", true], ["expectText", false]]);
+  const a = sideWith("after", [["goto", true], ["expectText", true]]);
+  assert.match(decideVerdict(sc("feature"), b, a).headline, /^Added: the new behavior appears only after/);
+  assert.match(decideVerdict(sc("fix"), b, a).headline, /^Fixed: the bug reproduces before/);
+  assert.match(decideVerdict(sc("change"), b, a).headline, /^Verified: /);
+});
+
+test("BEFORE lacking a new feature is shown neutral, not as a red failure", () => {
+  const verified = { kind: "verified", headline: "", detail: "", caveats: [] };
+  const failed = { kind: "after-fails", headline: "", detail: "", caveats: [] };
+  assert.deepEqual(stepMark(verified, "feature", "before", { ok: false }), { symbol: "○", tone: "neutral", label: "not there yet" });
+  assert.equal(stepMark(verified, "fix", "before", { ok: false }).label, "bug reproduced");
+  assert.equal(stepMark(verified, "feature", "after", { ok: false }).tone, "bad", "after failures stay red");
+  assert.equal(stepMark(failed, "feature", "before", { ok: false }).tone, "bad", "only a verified change softens BEFORE");
 });
