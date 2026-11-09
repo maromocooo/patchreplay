@@ -33,6 +33,14 @@
     "pull-request"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maromocooo/patchreplay.git"
+  },
+  "homepage": "https://github.com/maromocooo/patchreplay#readme",
+  "bugs": {
+    "url": "https://github.com/maromocooo/patchreplay/issues"
+  },
   "dependencies": {
     "gifenc": "^1.0.3",
     "playwright-core": "1.64.0",
